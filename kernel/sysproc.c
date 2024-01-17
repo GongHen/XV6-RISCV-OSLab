@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -89,3 +90,32 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+uint64
+sys_trace(void)
+{
+  int n;
+  argint(0, &n);
+  myproc()->tracemask = n;
+  return 0;
+}
+
+
+uint64 
+sys_sysinfo(void)
+{
+  uint64 addr;
+  argaddr(0, &addr);
+
+  struct proc *p = myproc();
+  struct sysinfo info;
+
+  info.freemem = get_free_mem();
+  info.nproc = get_proc_num();
+
+  if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0) // 把内核空间的info拷贝到对应程序的虚拟地址空间上
+    return -1;
+  return 0;
+}
+
