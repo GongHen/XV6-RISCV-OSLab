@@ -53,9 +53,12 @@ procinit(void)
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
-      p->state = UNUSED;
-      p->kstack = KSTACK((int) (p - proc));
+      // p->state = UNUSED;
+      // p->kstack = KSTACK((int) (p - proc));
   }
+
+  // mycode
+  //  kvminithart();
 }
 
 // Must be called with interrupts disabled,
@@ -132,6 +135,19 @@ found:
     return 0;
   }
 
+  // Init kernel page table per process.
+  // my code
+  p->kpagetable = vmmake();
+
+  // 在该进程内核页表中为该进程分配内核栈
+  char *pa = kalloc();
+  if(pa == 0)
+   panic("allocproc: alloc kstack");
+  uint64 va = TRAMPOLINE - 2*PGSIZE; // 内核栈地址
+  // 将内核栈映射到内核页表
+  kvmmap(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -160,6 +176,21 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+
+  // my code:
+  if(p->kstack){ // 内核栈空间需要手动回收 仿照uvmunmap编写即可
+    pte_t *pte = walk(p->kpagetable, p->kstack, 0);
+    if(pte == 0)
+      panic("kstackunmap: walk");
+    uint64 pa = PTE2PA(*pte);
+    kfree((void*)pa);
+    *pte = 0;
+    p->kstack = 0;
+  }
+  if(p->kpagetable) // 回收页表
+    proc_freekpagetable(p->kpagetable, p->kstack);
+  p->kpagetable = 0;
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -168,6 +199,7 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+
   p->state = UNUSED;
   p->tracemask = 0;
 
@@ -457,6 +489,7 @@ scheduler(void)
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
+    int found = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
@@ -465,20 +498,40 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        // my code
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
+
+        // my code:
+        kvminithart(); // 切换回内核页表
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+
+        // my code
+        found = 1;
       }
       release(&p->lock);
     }
+    // mycode
+#if !defined (LAB_FS)
+    if(found == 0) {
+      intr_on();
+      asm volatile("wfi");
+    }
+#else
+    ;
+#endif
   }
 }
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
-// intena because intena is a property of this
+// intena lbecause intena is a property of this
 // kernel thread, not this CPU. It should
 // be proc->intena and proc->noff, but that would
 // break in the few places where a lock is held but
@@ -687,6 +740,7 @@ procdump(void)
   }
 }
 
+// my code
 uint64
 get_proc_num(void)
 {
@@ -703,3 +757,19 @@ get_proc_num(void)
   return cnt;
 }
 
+ // my code:
+ extern char etext[];
+
+ void 
+ proc_freekpagetable(pagetable_t pt, uint64 kstack)
+{
+    // 怎么分配的怎么销毁
+    kvmunmap(pt, UART0, PGSIZE);
+    kvmunmap(pt, VIRTIO0, PGSIZE);
+    kvmunmap(pt, CLINT, 0x10000);
+    kvmunmap(pt, PLIC, 0x400000);
+    kvmunmap(pt, KERNBASE, (uint64)etext-KERNBASE);
+    kvmunmap(pt, (uint64)etext, PHYSTOP-(uint64)etext);
+    kvmunmap(pt, TRAMPOLINE, PGSIZE);
+    freewalk(pt);
+}

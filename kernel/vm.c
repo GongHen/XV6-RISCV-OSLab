@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -53,7 +55,8 @@ kvmmake(void)
 void
 kvminit(void)
 {
-  kernel_pagetable = kvmmake();
+  // kernel_pagetable = kvmmake();
+  kernel_pagetable = vmmake();
 }
 
 // Switch h/w page table register to the kernel's page table,
@@ -437,3 +440,108 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+// my code
+void 
+vmprint(pagetable_t pagetable, uint depth)
+{
+  if(depth == 0)
+    printf("page table %p\n", pagetable);
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      for(int j = 0; j < depth; j++)
+        printf(".. ");
+      uint64 child = PTE2PA(pte);
+      printf("..%d: pte %p pa %p\n", i, pte, child);
+      if(depth < 2)
+        // 如果层数等于 2 就不需要继续递归了，因为这是叶子节点
+        vmprint((pagetable_t) child, depth + 1);
+    }
+  } 
+}
+
+// my code
+/* 
+ * 原来的kvmmap直接修改了kernel_pagetable，这里写一个新的kvmmap允许指定要映射VA-PA关系的页表
+ */
+void 
+kvmmap2(pagetable_t pt, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+    if(mappages(pt, va, sz, pa, perm) != 0)
+        panic("kvmmap2");
+}
+
+pagetable_t
+vmmake(void)
+{
+  pagetable_t pt = (pagetable_t) kalloc();
+  memset(pt, 0, PGSIZE);
+
+  // uart registers
+  kvmmap2(pt, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmap2(pt, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  kvmmap2(pt, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  kvmmap2(pt, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  kvmmap2(pt, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  kvmmap2(pt, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  kvmmap2(pt, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+  return pt;
+}
+
+// uint64
+// kvmpa(uint64 va)
+// {
+//   uint64 off = va % PGSIZE;
+//   pte_t *pte;
+//   uint64 pa;
+
+//   pte = walk(myproc()->kpagetable, va, 0); 
+//   if(pte == 0)
+//     panic("kvmpa");
+//   if((*pte & PTE_V) == 0)
+//     panic("kvmpa");
+//   pa = PTE2PA(*pte);
+//   return pa+off;
+// }
+
+// 仿照uvmunmap写一个kvmunmap,唯一的区别是不用回收物理内存
+void 
+kvmunmap(pagetable_t pagetable, uint64 va, uint64 size)
+{
+    uint64 a;
+    pte_t *pte;
+
+    if((va % PGSIZE) != 0)
+        panic("kvmunmap: not aligned");
+
+    for(a = va; a < va + size; a += PGSIZE){
+        if((pte = walk(pagetable, a, 0)) == 0)
+            panic("kvmunmap: walk");
+        if((*pte & PTE_V) == 0)
+            panic("kvmunmap: not mapped");
+        if(PTE_FLAGS(*pte) == PTE_V)
+            panic("kvmunmap: not a leaf");
+
+        // 不需要销毁物理内存
+        //uint64 pa = PTE2PA(*pte);
+        //kfree((void*)pa);
+        
+        *pte = 0;
+    }
+}
+

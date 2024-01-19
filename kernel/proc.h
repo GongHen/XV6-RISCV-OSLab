@@ -105,4 +105,5 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int tracemask;               // 实验（syscall）加的，用来跟踪系统调用
+  pagetable_t kpagetable;      // kpagetable,新添加的内容
 };
