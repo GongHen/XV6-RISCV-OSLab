@@ -23,13 +23,15 @@ int
 exec(char *path, char **argv)
 {
   char *s, *last;
-  int i, off;
+  int i, off, j;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
+
+  pte_t *pte, *kpte;
 
   begin_op();
 
@@ -64,6 +66,12 @@ exec(char *path, char **argv)
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz, flags2perm(ph.flags))) == 0)
       goto bad;
+
+    // my code
+    if(sz1 >= PLIC) {
+      goto bad;
+    }
+
     sz = sz1;
     if(loadseg(pagetable, ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
@@ -108,6 +116,14 @@ exec(char *path, char **argv)
     goto bad;
   if(copyout(pagetable, sp, (char *)ustack, (argc+1)*sizeof(uint64)) < 0)
     goto bad;
+
+  // mycode
+  uvmunmap(p->kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
+  for (j = 0; j < sz; j += PGSIZE) {
+    pte = walk(pagetable, j, 0);
+    kpte = walk(p->kpagetable, j ,1);
+    *kpte = (*pte) & ~PTE_U;
+  }
 
   // arguments to user main(argc, argv)
   // argc is returned via the system call return

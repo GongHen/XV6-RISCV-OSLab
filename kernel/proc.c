@@ -267,6 +267,7 @@ void
 userinit(void)
 {
   struct proc *p;
+  pte_t *pte, *kpte;
 
   p = allocproc();
   initproc = p;
@@ -275,6 +276,11 @@ userinit(void)
   // and data into it.
   uvmfirst(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+
+  // my code
+  pte = walk(p->pagetable, 0, 0);
+  kpte = walk(p->kpagetable, 0, 1);
+  *kpte = (*pte) & ~PTE_U;
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
@@ -313,9 +319,11 @@ growproc(int n)
 int
 fork(void)
 {
-  int i, pid;
+  int i, pid, j;
   struct proc *np;
   struct proc *p = myproc();
+
+  pte_t *pte, *kpte;
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -328,6 +336,13 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+  // my code
+  for (j = 0; j < p->sz; j += PGSIZE) {
+    pte = walk(np->kpagetable, j, 0);
+    kpte = walk(np->kpagetable, j ,1);
+    *kpte = (*pte) & ~PTE_U;
+  }
+
   np->sz = p->sz;
 
   // copy saved user registers.

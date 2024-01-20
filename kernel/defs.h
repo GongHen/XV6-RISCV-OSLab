@@ -183,6 +183,10 @@ void            vmprint(pagetable_t pagetable, uint depth);
 pagetable_t     vmmake(void);
 void            kvmunmap(pagetable_t pagetable, uint64 va, uint64 size);
 
+// vmcopin.c
+int             copyin_new(pagetable_t, char*, uint64, uint64);
+int             copyinstr_new(pagetable_t, char*, uint64, uint64);
+
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);
