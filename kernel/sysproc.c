@@ -40,12 +40,13 @@ uint64
 sys_sbrk(void)
 {
   uint64 addr;
-  int n, j;
+  int n;
+  // int n, j;
 
-  struct proc *p = myproc();
+  // struct proc *p = myproc();
 
   
-  pte_t *pte, *kpte;
+  // pte_t *pte, *kpte;
 
   argint(0, &n);
   addr = myproc()->sz;
@@ -53,17 +54,17 @@ sys_sbrk(void)
     return -1;
 
   // my code
-  if(n > 0) {
-    for (j = addr; j < addr + n; j += PGSIZE) {
-      pte = walk(p->pagetable, j, 0);
-      kpte = walk(p->kpagetable, j ,1);
-      *kpte = (*pte) & ~PTE_U;
-    }
-  } else {
-    for (j = addr; j < addr + n; j -= PGSIZE) {
-      uvmunmap(p->kpagetable, j, 1, 0);
-    }
-  }
+  // if(n > 0) {
+  //   for (j = addr; j < addr + n; j += PGSIZE) {
+  //     pte = walk(p->pagetable, j, 0);
+  //     kpte = walk(p->kpagetable, j ,1);
+  //     *kpte = (*pte) & ~PTE_U;
+  //   }
+  // } else {
+  //   for (j = addr; j < addr + n; j -= PGSIZE) {
+  //     uvmunmap(p->kpagetable, j, 1, 0);
+  //   }
+  // }
 
   return addr;
 }
