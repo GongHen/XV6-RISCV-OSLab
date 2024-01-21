@@ -13,11 +13,12 @@
  */
 pagetable_t kernel_pagetable;
 
-extern char etext[];  // kernel.ld sets this to end of kernel code.
+extern char etext[];  // kernel.ld sets this to end of kernel code. kernel.ld 会设置这个在内核代码结束那里.
 
 extern char trampoline[]; // trampoline.S
 
 // Make a direct-map page table for the kernel.
+// 为内核创建一个直接映射页表
 pagetable_t
 kvmmake(void)
 {
@@ -27,31 +28,38 @@ kvmmake(void)
   memset(kpgtbl, 0, PGSIZE);
 
   // uart registers
+  // uart 寄存器
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
   // virtio mmio disk interface
+  // virtio mmio 磁盘接口
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
   // PLIC
   kvmmap(kpgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
 
   // map kernel text executable and read-only.
+  // 映射内核可执行代码和只读的数据
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
 
   // map kernel data and the physical RAM we'll make use of.
+  // 映射内核数据和我们将使用的物理内存
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
 
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
+  // 将陷阱的进出用到的蹦床（trampoline）映射到内核中最高的虚拟地址。
   kvmmap(kpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 
   // allocate and map a kernel stack for each process.
+  // 映射内核栈
   proc_mapstacks(kpgtbl);
   
   return kpgtbl;
 }
 
 // Initialize the one kernel_pagetable
+// 初始化一个内核页表
 void
 kvminit(void)
 {
@@ -61,6 +69,8 @@ kvminit(void)
 
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
+// 将h/w页表寄存器切换到内核的页表,
+// 并启用分页
 void
 kvminithart()
 {
@@ -85,29 +95,53 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+// 返回页表pagetable中PTE的地址
+// 返回在页表pagetable中，虚拟地址va对应的PTE地址。如果`alloc != 0`，则自动创建必要的页表页
+//
+// 在risc-v Sv39模式中，有三级页表页。
+// 一个页表页包含512个64位的PTE。
+// 一个64位的虚拟地址被分割成了五个域：
+//   39..63 -- 必须为0
+//   30..38 -- 9位二级索引
+//   21..29 -- 9位一级索引
+//   12..20 -- 9位零级索引
+//    0..11 -- 12位的页中字节偏移量
+
+// walk会返回虚拟地址对应的最后一级页表项，若alloc!=0，并且va没有对应的页表项，则会为它创建出一个页表项。
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
   if(va >= MAXVA)
     panic("walk");
 
+  // 从2级开始
   for(int level = 2; level > 0; level--) {
+    // 获取每个级别的页表索引
     pte_t *pte = &pagetable[PX(level, va)];
+    // 如果存在pte并且有效，合法，从PTE中取出下一级页表物理地址并替换pagetable
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
+      // 走到这里，说明不存在pte，或者该pte已经是无效pte
+      // 如果不允许分配，或者尝试为该pte分配新的下一级页表失败，直接返回0
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
+      // 将刚刚创建的新页表填充0
       memset(pagetable, 0, PGSIZE);
+      // 设置正确的pte
       *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
+   // 返回最后一级页表中的PTE
   return &pagetable[PX(0, va)];
 }
 
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
+// 查找虚拟地址，返回物理地址，
+// 如果未映射，则为0。
+// 只能用于查找用户页。
 uint64
 walkaddr(pagetable_t pagetable, uint64 va)
 {
@@ -131,6 +165,9 @@ walkaddr(pagetable_t pagetable, uint64 va)
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
+// 向内核页表中添加一个映射 
+// 只在启动时被使用
+// 该函数不会刷新TLB或（通知硬件）打开分页
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
@@ -142,6 +179,9 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
+// 为在va处开始的虚拟地址创建指向pa处的物理地址的PTEs
+// va以及size不必须是页对齐的。
+// 返回0成功，如果`walk()`函数无法分配一个需要的页表页则返回-1
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -152,15 +192,24 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     panic("mappages: size");
   
   a = PGROUNDDOWN(va);
+  // PGROUNDDOWN的含义就是取下面的第一个页对齐位置。（假如给定n=8244，则PGROUNDDOWN(n)=8192）。
+  // [a, last]，就是要为用户分配的一段连续虚拟地址空间范围，首部和尾部都进行了向下页对齐 
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
+    // 如果索引pte失败，可能是内存不足了，直接返回-1
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
+    // 如果pte存在并且pte合法，说明我们要映射的虚拟地址上面已经有另一个映射了
+    // 直接panic
     if(*pte & PTE_V)
       panic("mappages: remap");
+    // 将物理地址转换成PTE形式（去掉offset部分，预留flag部分）
+    // 并加上权限，以及有效flag
     *pte = PA2PTE(pa) | perm | PTE_V;
+    // 如果a和last相等，说明已经无需再分配了。
     if(a == last)
       break;
+    // a和pa一起递增，等待下一次循环
     a += PGSIZE;
     pa += PGSIZE;
   }

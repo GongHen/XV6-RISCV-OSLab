@@ -187,6 +187,9 @@ consoleinit(void)
 
   // connect read and write system calls
   // to consoleread and consolewrite.
+  // 将console设备上的read和write调用连接到consoleread和consolewrite函数
+  // 这就是上面所说的驱动程序的上半部分，包含了两个读写接口，当read和write系统调用
+  // 发生时，如果fd是一个硬件设备，则会调用这两个读写接口，稍后我们会看到
   devsw[CONSOLE].read = consoleread;
   devsw[CONSOLE].write = consolewrite;
 }

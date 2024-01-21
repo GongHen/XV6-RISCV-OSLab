@@ -79,23 +79,30 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
   int i = 0;
   struct proc *pr = myproc();
 
+  // 获取管道锁，避免管道中数据错乱
   acquire(&pi->lock);
+  // 遍历每一个要写入buffer的字节
   while(i < n){
+    // 如果进程已经关闭或者管道读端已经关闭，释放管道锁，写入失败
     if(pi->readopen == 0 || killed(pr)){
       release(&pi->lock);
       return -1;
     }
     if(pi->nwrite == pi->nread + PIPESIZE){ //DOC: pipewrite-full
+      // 唤醒在nread上睡眠的进程，让它们从管道中取数据
       wakeup(&pi->nread);
+      // 在nwrite上睡眠
       sleep(&pi->nwrite, &pi->lock);
     } else {
       char ch;
+      // 实际复制数据到data缓冲区
       if(copyin(pr->pagetable, &ch, addr + i, 1) == -1)
         break;
       pi->data[pi->nwrite++ % PIPESIZE] = ch;
       i++;
     }
   }
+  // 写入完成，唤醒在nread上睡眠的进程，释放管道锁
   wakeup(&pi->nread);
   release(&pi->lock);
 
@@ -109,14 +116,19 @@ piperead(struct pipe *pi, uint64 addr, int n)
   struct proc *pr = myproc();
   char ch;
 
+  // 获取管道锁以避免读写混乱
   acquire(&pi->lock);
+  // 在管道为空（并且写入端是开启的）这个条件上循环
   while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
+    // 如果进程已经被杀死，释放管道锁，读取宣告失败
     if(killed(pr)){
       release(&pi->lock);
       return -1;
     }
+     // 如果管道为空且写入端开启（可能有人会写入数据），在nread上睡眠
     sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
   }
+  // 实际读取
   for(i = 0; i < n; i++){  //DOC: piperead-copy
     if(pi->nread == pi->nwrite)
       break;
@@ -124,7 +136,9 @@ piperead(struct pipe *pi, uint64 addr, int n)
     if(copyout(pr->pagetable, addr + i, &ch, 1) == -1)
       break;
   }
+  // 因为已经读了数据，所以管道中可能已经有一些空间了，唤醒在nwrite上睡眠的写进程
   wakeup(&pi->nwrite);  //DOC: piperead-wakeup
+  // 释放管道锁
   release(&pi->lock);
   return i;
 }

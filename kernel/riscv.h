@@ -333,7 +333,7 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #endif // __ASSEMBLER__
 
 #define PGSIZE 4096 // bytes per page
-#define PGSHIFT 12  // bits of offset within a page
+#define PGSHIFT 12  // bits of offset within a page, 一个页面中的偏移量位数
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE-1))
@@ -347,15 +347,18 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE_A (1L << 6) 
 
 // shift a physical address to the right place for a PTE.
+// PA2PTE(pa)：物理地址转换成PTE，实际上是右移12位去掉offset，然后左移10位预留flag位
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
-
+// PTE2PA(pte)：PTE转换成物理地址，实际上是左移10位去掉flag，右移补上12位0（页表都是这样对齐的）
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
 
 // extract the three 9-bit page table indices from a virtual address.
+// 下面三个宏用于从虚拟地址中提取三个9位的索引
 #define PXMASK          0x1FF // 9 bits
 #define PXSHIFT(level)  (PGSHIFT+(9*(level)))
+// PX(level, va)：从虚拟地址va中提取出第level级页表索引
 #define PX(level, va) ((((uint64) (va)) >> PXSHIFT(level)) & PXMASK)
 
 // one beyond the highest possible virtual address.

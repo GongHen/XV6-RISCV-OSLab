@@ -53,25 +53,32 @@ void
 uartinit(void)
 {
   // disable interrupts.
+  // 先关闭中断
   WriteReg(IER, 0x00);
 
   // special mode to set baud rate.
+  // 打开设置波特率的特殊模式
   WriteReg(LCR, LCR_BAUD_LATCH);
 
   // LSB for baud rate of 38.4K.
+  // 设置LSB波特率
   WriteReg(0, 0x03);
 
   // MSB for baud rate of 38.4K.
+  // 设置MSB波特率
   WriteReg(1, 0x00);
 
   // leave set-baud mode,
   // and set word length to 8 bits, no parity.
+  // 跳出设置波特率模式，设置字长为8比特
   WriteReg(LCR, LCR_EIGHT_BITS);
 
   // reset and enable FIFOs.
+  // 重置、开启FIFO
   WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
 
   // enable transmit and receive interrupts.
+  // 开启传送(TX)和接收(RX)中断
   WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
 
   initlock(&uart_tx_lock, "uart");

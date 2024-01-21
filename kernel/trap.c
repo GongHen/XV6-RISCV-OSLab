@@ -65,6 +65,7 @@ usertrap(void)
     intr_on();
 
     syscall();
+  // 判断是否是设备中断
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -77,6 +78,7 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
+  // 如果是一次时钟中断，主动放弃cpu
   if(which_dev == 2)
     yield();
 
@@ -94,14 +96,19 @@ usertrapret(void)
   // we're about to switch the destination of traps from
   // kerneltrap() to usertrap(), so turn off interrupts until
   // we're back in user space, where usertrap() is correct.
+  // 关闭中断，直到回到user space
+  // https://www.cnblogs.com/lilpig/p/17168211.html
   intr_off();
 
   // send syscalls, interrupts, and exceptions to uservec in trampoline.S
   uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
+  // 恢复stvec，让系统调用、中断以及异常都能正常走到trampoline
   w_stvec(trampoline_uservec);
 
   // set up trapframe values that uservec will need when
   // the process next traps into the kernel.
+  // 设置trapframe中当进程再次进入内核时所需要的数据
+  // 这也就是之前在trampoline中加载的，那些进程中的内核相关数据的来源
   p->trapframe->kernel_satp = r_satp();         // kernel page table
   p->trapframe->kernel_sp = p->kstack + PGSIZE; // process's kernel stack
   p->trapframe->kernel_trap = (uint64)usertrap;
@@ -111,20 +118,26 @@ usertrapret(void)
   // to get to user space.
   
   // set S Previous Privilege mode to User.
+  // 设置trampoline中的sret指令为返回user space要用到的寄存器sstatus
+  // 该寄存器中的控制位控制了sret指令的行为
   unsigned long x = r_sstatus();
-  x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
-  x |= SSTATUS_SPIE; // enable interrupts in user mode
-  w_sstatus(x);
+  x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode,该控制位返回到usermode
+  x |= SSTATUS_SPIE; // enable interrupts in user mode,该控制位在进入用户模式时打开中断
+  w_sstatus(x); // 写入该控制寄存器
 
   // set S Exception Program Counter to the saved user pc.
+  // 将sepc设置成epc，在系统调用的代码路径中，就是ecall的下一条指令
   w_sepc(p->trapframe->epc);
 
   // tell trampoline.S the user page table to switch to.
+  // satp变量即用户进程页表
   uint64 satp = MAKE_SATP(p->pagetable);
 
   // jump to userret in trampoline.S at the top of memory, which 
   // switches to the user page table, restores user registers,
   // and switches to user mode with sret.
+  // 跳到内存顶部的trampoline.S，它会切换到用户页表，恢复用户寄存器
+  // 通过sret切换回usermode
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
   ((void (*)(uint64))trampoline_userret)(satp);
 }
