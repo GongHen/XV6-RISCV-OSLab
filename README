@@ -1,1 +1,11 @@
  MIT&南京大学OSLab!!!
+参考文章：
+https://pdos.csail.mit.edu/6.S081/2020/labs/
+https://github.com/FrankZn/xv6-riscv-book-Chinese/blob/main/Chapter-3.md
+https://blog.csdn.net/weixin_47037146/article/details/128859088
+https://mit-public-courses-cn-translatio.gitbook.io/mit6-s081/lec11-thread-switching-robert/11.1-thread
+https://github.com/mit-pdos/xv6-riscv
+https://github.com/ejunjsh/myxv6/tree/main
+https://blog.xen.lol/2021/02/04/mit-6-S081-lab/
+https://blog.csdn.net/u013577996/article/details/109582932
+https://hitsz-cslab.gitee.io/os-labs/lab1/part2/#11
