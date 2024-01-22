@@ -500,6 +500,12 @@ wait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+// 每个CPU上的进程调度器
+// 在设置完自己后，每一个CPU都调用scheduler()
+// scheduler永不反悔，它循环做下面的事：
+//  - 选择一个要运行的进程
+//  - swtch以开始执行这个进程
+//  - 最终这个进程通过swtch将控制转移回调度器
 void
 scheduler(void)
 {
@@ -573,8 +579,11 @@ sched(void)
   if(intr_get())
     panic("sched interruptible");
 
+  // 记录当前中断状态
   intena = mycpu()->intena;
+  // 切换到调度器线程上下文执行
   swtch(&p->context, &mycpu()->context);
+  // 恢复中断状态
   mycpu()->intena = intena;
 }
 
