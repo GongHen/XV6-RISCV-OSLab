@@ -2,7 +2,7 @@
 
 参考文章：</br>
 MIT OSLab</br>
-https://pdos.csail.mit.edu/6.S081/2020/labs/</br>
+[MIT Index of /2020/labs](https://pdos.csail.mit.edu/6.S081/2020/labs/)</br>
 xv6-riscv-book 中文版</br>
 https://github.com/FrankZn/xv6-riscv-book-Chinese/blob/main/Chapter-3.md</br>
 https://github.com/ranxian/xv6-chinese</br>
