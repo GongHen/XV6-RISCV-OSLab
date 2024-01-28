@@ -6,6 +6,7 @@ MIT OSLab</br>
 xv6-riscv-book 中文版</br>
 https://github.com/FrankZn/xv6-riscv-book-Chinese/blob/main/Chapter-3.md</br>
 https://github.com/ranxian/xv6-chinese</br>
+https://th0ar.gitbooks.io/xv6-chinese/content/content/chapter0.html</br>
 原文</br>
 https://pdos.csail.mit.edu/6.828/2012/xv6/book-rev7.pdf</br>
 RISC-V手册</br>
@@ -24,3 +25,6 @@ https://csdiy.wiki/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/NJUOS/</br>
 https://jyywiki.cn/</br>
 https://jyywiki.cn/OS/2022/slides/18.slides.html#/</br>
 https://www.zhihu.com/question/598621331</br>
+
+RISC V 指令
+jalr：jump and link register
